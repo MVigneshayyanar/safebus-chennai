@@ -1,27 +1,96 @@
 'use client';
 
-import React from 'react';
-import { AlertTriangle, PhoneCall, QrCode, Search, Flag, Bus, Activity, Terminal } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { 
+  AlertTriangle, PhoneCall, QrCode, Search, Flag, Bus, 
+  Activity, Terminal, Shield, User, Lock, LogOut, CheckCircle2, X
+} from 'lucide-react';
 import { Locale } from '@/lib/i18n';
+
+export interface UserProfile {
+  id: string;
+  name: string;
+  email: string;
+  role: 'ADMIN' | 'OFFICER';
+}
 
 interface NavbarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   locale: Locale;
   setLocale: (loc: Locale) => void;
+  user: UserProfile | null;
+  setUser: (user: UserProfile | null) => void;
+  showLoginModal: boolean;
+  setShowLoginModal: (show: boolean) => void;
 }
 
-export default function Navbar({ activeTab, setActiveTab, locale, setLocale }: NavbarProps) {
+export default function Navbar({ 
+  activeTab, 
+  setActiveTab, 
+  locale, 
+  setLocale,
+  user,
+  setUser,
+  showLoginModal,
+  setShowLoginModal
+}: NavbarProps) {
   const isTa = locale === 'ta';
 
-  const navItems = [
-    { id: 'verifier', label: isTa ? 'சரிபார்' : 'Verify', fullLabel: isTa ? 'டிக்கெட் சரிபார்' : 'Verify Ticket', icon: QrCode },
-    { id: 'checker', label: isTa ? 'சோதனை' : 'Check', fullLabel: isTa ? 'தள / UPI சோதனை' : 'Check Link', icon: Search },
-    { id: 'report', label: isTa ? 'புகார்' : 'Report', fullLabel: isTa ? 'புகார் செய்' : 'Report Fraud', icon: Flag },
-    { id: 'operators', label: isTa ? 'பேருந்து' : 'Registry', fullLabel: isTa ? 'ஆம்னிபஸ் பதிவேடு' : 'Omnibus Registry', icon: Bus },
-    { id: 'enforcement', label: isTa ? 'அதிகாரி' : 'RTO', fullLabel: isTa ? 'அதிகாரிகள்' : 'RTO Enforcement', icon: Activity },
-    { id: 'developer', label: isTa ? 'API' : 'API', fullLabel: isTa ? 'API கன்சோல்' : 'Aggregator API', icon: Terminal },
+  const [loginEmail, setLoginEmail] = useState('admin@safebus.in');
+  const [loginPassword, setLoginPassword] = useState('admin123');
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
+
+  const handleLogin = async (emailToUse?: string, passToUse?: string) => {
+    setLoginLoading(true);
+    setLoginError(null);
+    const email = emailToUse || loginEmail;
+    const password = passToUse || loginPassword;
+
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error?.message || 'Login failed');
+      }
+      setUser(json.data.user);
+      setShowLoginModal(false);
+      setActiveTab('enforcement');
+    } catch (err: any) {
+      setLoginError(err.message || 'Login failed');
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      setUser(null);
+      setActiveTab('verifier');
+    } catch {}
+  };
+
+  // Role-Based Navigation Filtering:
+  // 1. PUBLIC / GUEST: Passenger verification and reporting tools alone
+  // 2. OFFICER: Enforcement role functionality alone (RTO Enforcement, Verify, Registry, Check Link)
+  // 3. ADMIN: FULL WEBSITE (All 6 modules including Web Scraper Crawler Bot & Aggregator Registry API)
+  const allNavItems = [
+    { id: 'verifier', label: isTa ? 'சரிபார்' : 'Verify', fullLabel: isTa ? 'டிக்கெட் சரிபார்' : 'Verify Ticket', icon: QrCode, roles: ['PUBLIC', 'OFFICER', 'ADMIN'] },
+    { id: 'checker', label: isTa ? 'சோதனை' : 'Check', fullLabel: isTa ? 'தள / UPI சோதனை' : 'Check Link', icon: Search, roles: ['PUBLIC', 'OFFICER', 'ADMIN'] },
+    { id: 'report', label: isTa ? 'புகார்' : 'Report', fullLabel: isTa ? 'புகார் செய்' : 'Report Fraud', icon: Flag, roles: ['PUBLIC', 'ADMIN'] },
+    { id: 'operators', label: isTa ? 'பேருந்து' : 'Registry', fullLabel: isTa ? 'ஆம்னிபஸ் பதிவேடு' : 'Omnibus Registry', icon: Bus, roles: ['PUBLIC', 'OFFICER', 'ADMIN'] },
+    { id: 'enforcement', label: isTa ? 'அதிகாரி' : 'RTO', fullLabel: isTa ? 'அதிகாரிகள்' : 'RTO Enforcement', icon: Activity, roles: ['OFFICER', 'ADMIN'] },
+    { id: 'developer', label: isTa ? 'API' : 'API', fullLabel: isTa ? 'API கன்சோல்' : 'Aggregator API', icon: Terminal, roles: ['ADMIN'] },
   ];
+
+  const currentRole = user ? user.role : 'PUBLIC';
+  const navItems = allNavItems.filter((item) => item.roles.includes(currentRole));
 
   return (
     <header className="sticky top-0 z-40 w-full bg-white border-b border-[#E3E8F2] shadow-xs">
@@ -85,13 +154,44 @@ export default function Navbar({ activeTab, setActiveTab, locale, setLocale }: N
             <span>Kilambakkam (KCBT) RTO</span>
           </div>
 
-          {/* Language Selector */}
-          <div className="flex items-center gap-1.5">
+          {/* Right Controls: Admin Login + Language Selector */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Admin / Officer Profile or Login Trigger */}
+            {user ? (
+              <div className="flex items-center gap-1.5 sm:gap-2 bg-[#F5F7FB] border border-[#E3E8F2] rounded-xl px-2.5 py-1 text-xs">
+                <div className="w-2 h-2 rounded-full bg-[#1E9E5A]" />
+                <span className="font-bold text-[#183264] max-w-[120px] truncate hidden sm:inline">
+                  {user.name} ({user.role})
+                </span>
+                <span className="font-bold text-[#183264] sm:hidden">
+                  {user.role}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="text-[#4A5D7E] hover:text-rose-600 p-1 cursor-pointer transition-colors"
+                  title="Logout"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowLoginModal(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 text-xs font-bold rounded-xl bg-[#183264] text-white hover:bg-[#12254b] transition-all cursor-pointer shadow-xs"
+              >
+                <Shield className="w-3.5 h-3.5 text-[#FF7F50]" />
+                <span>Admin Login</span>
+              </button>
+            )}
+
+            {/* Language Selector */}
             <div className="flex items-center bg-[#F5F7FB] rounded-xl p-0.5 border border-[#E3E8F2]">
               <button
                 type="button"
                 onClick={() => setLocale('en')}
-                className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all ${
+                className={`px-2 py-1 text-xs font-bold rounded-lg transition-all ${
                   locale === 'en'
                     ? 'bg-[#183264] text-white shadow-xs'
                     : 'text-[#4A5D7E] hover:text-[#183264]'
@@ -102,7 +202,7 @@ export default function Navbar({ activeTab, setActiveTab, locale, setLocale }: N
               <button
                 type="button"
                 onClick={() => setLocale('ta')}
-                className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all ${
+                className={`px-2 py-1 text-xs font-bold rounded-lg transition-all ${
                   locale === 'ta'
                     ? 'bg-[#183264] text-white shadow-xs'
                     : 'text-[#4A5D7E] hover:text-[#183264]'
@@ -160,6 +260,119 @@ export default function Navbar({ activeTab, setActiveTab, locale, setLocale }: N
           );
         })}
       </div>
+
+      {/* Admin / Officer Login Modal */}
+      {showLoginModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-xl border border-[#E3E8F2] relative animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-[#E3E8F2] pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-[#183264] text-[#FF7F50]">
+                  <Shield className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-[#183264]">Admin & Officer Portal</h3>
+                  <p className="text-[11px] text-[#4A5D7E]">State Transport Authority (STA) Command Center</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowLoginModal(false)}
+                className="text-[#4A5D7E] hover:text-[#183264] p-1 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Quick 1-Click Demo Login Presets */}
+            <div className="space-y-2">
+              <label className="text-[11px] font-bold text-[#4A5D7E] uppercase tracking-wider">
+                1-Click Quick Demo Credentials
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleLogin('admin@safebus.in', 'admin123')}
+                  disabled={loginLoading}
+                  className="p-2.5 rounded-xl border border-[#E3E8F2] bg-[#F5F7FB] hover:border-[#183264] text-left transition-all cursor-pointer"
+                >
+                  <div className="font-bold text-xs text-[#183264] flex items-center gap-1">
+                    <Shield className="w-3.5 h-3.5 text-[#FF7F50]" />
+                    <span>SafeBus Admin</span>
+                  </div>
+                  <div className="text-[10px] text-[#4A5D7E] font-mono mt-0.5 truncate">
+                    admin@safebus.in
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleLogin('officer@safebus.in', 'officer123')}
+                  disabled={loginLoading}
+                  className="p-2.5 rounded-xl border border-[#E3E8F2] bg-[#F5F7FB] hover:border-[#183264] text-left transition-all cursor-pointer"
+                >
+                  <div className="font-bold text-xs text-[#183264] flex items-center gap-1">
+                    <User className="w-3.5 h-3.5 text-[#1E9E5A]" />
+                    <span>RTO Inspector</span>
+                  </div>
+                  <div className="text-[10px] text-[#4A5D7E] font-mono mt-0.5 truncate">
+                    officer@safebus.in
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* Error Banner */}
+            {loginError && (
+              <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700 font-semibold">
+                {loginError}
+              </div>
+            )}
+
+            {/* Manual Form */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleLogin();
+              }}
+              className="space-y-3 pt-1"
+            >
+              <div>
+                <label className="block text-xs font-bold text-[#183264] mb-1">Officer Email</label>
+                <input
+                  type="email"
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  required
+                  placeholder="admin@safebus.in"
+                  className="w-full text-xs p-2.5 bg-[#F5F7FB] border border-[#E3E8F2] rounded-xl text-[#183264] focus:outline-none focus:ring-1 focus:ring-[#FF7F50]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#183264] mb-1">Password</label>
+                <input
+                  type="password"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  required
+                  placeholder="••••••••"
+                  className="w-full text-xs p-2.5 bg-[#F5F7FB] border border-[#E3E8F2] rounded-xl text-[#183264] focus:outline-none focus:ring-1 focus:ring-[#FF7F50]"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={loginLoading}
+                className="btn-coral w-full py-2.5 text-xs font-bold cursor-pointer shadow-sm mt-2"
+              >
+                {loginLoading ? 'Authenticating...' : 'Sign In to Enforcement Center'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </header>
   );
 }

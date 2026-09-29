@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import Navbar from '@/components/Navbar';
+import React, { useState, useEffect } from 'react';
+import Navbar, { UserProfile } from '@/components/Navbar';
 import TicketVerifier from '@/components/TicketVerifier';
 import DomainChecker from '@/components/DomainChecker';
 import ReportScam from '@/components/ReportScam';
@@ -9,14 +9,30 @@ import OperatorDirectory from '@/components/OperatorDirectory';
 import EnforcementDashboard from '@/components/EnforcementDashboard';
 import AggregatorPortal from '@/components/AggregatorPortal';
 import { Locale } from '@/lib/i18n';
-import { ShieldCheck, PhoneCall, Bus, MapPin, ExternalLink } from 'lucide-react';
+import { ShieldCheck, PhoneCall, Bus, MapPin, ExternalLink, Shield, User, Lock, Sparkles, Key } from 'lucide-react';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState('verifier');
   const [locale, setLocale] = useState<Locale>('en');
   const [reportPrefill, setReportPrefill] = useState<{ type: string; value: string } | null>(null);
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   const isTa = locale === 'ta';
+
+  // Check active session on initial load
+  useEffect(() => {
+    async function checkSession() {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data) setUser(json.data);
+        }
+      } catch {}
+    }
+    checkSession();
+  }, []);
 
   const handleReportPrefill = (entity: { type: string; value: string }) => {
     setReportPrefill(entity);
@@ -31,7 +47,54 @@ export default function Home() {
         setActiveTab={setActiveTab}
         locale={locale}
         setLocale={setLocale}
+        user={user}
+        setUser={setUser}
+        showLoginModal={showLoginModal}
+        setShowLoginModal={setShowLoginModal}
       />
+
+      {/* Role State Banner */}
+      <div className="bg-[#183264]/5 border-b border-[#E3E8F2] px-3 sm:px-6 py-2">
+        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex items-center gap-2">
+            {user?.role === 'ADMIN' ? (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#183264] text-white text-[11px] font-bold">
+                <Shield className="w-3.5 h-3.5 text-[#FF7F50]" />
+                <span>ADMINISTRATOR MODE (FULL WEBSITE)</span>
+              </span>
+            ) : user?.role === 'OFFICER' ? (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#1E9E5A]/15 text-[#1E9E5A] border border-[#1E9E5A]/30 text-[11px] font-bold">
+                <User className="w-3.5 h-3.5" />
+                <span>RTO ENFORCEMENT OFFICER MODE</span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#F5F7FB] text-[#4A5D7E] border border-[#E3E8F2] text-[11px] font-bold">
+                <ShieldCheck className="w-3.5 h-3.5 text-[#183264]" />
+                <span>PASSENGER PUBLIC MODE</span>
+              </span>
+            )}
+
+            <span className="text-[#4A5D7E] text-[11px] hidden sm:inline">
+              {user?.role === 'ADMIN'
+                ? 'All 5 Hackathon modules, Automated Scraper Bot & Aggregator Central Registry APIs unlocked.'
+                : user?.role === 'OFFICER'
+                ? `Logged in as ${user.name}. Scalping alerts, reports, and conductor inspection tools active.`
+                : 'Displaying citizen verification & reporting tools. Log in as Admin to view full website.'}
+            </span>
+          </div>
+
+          {!user && (
+            <button
+              type="button"
+              onClick={() => setShowLoginModal(true)}
+              className="text-[#FF7F50] hover:underline font-bold text-[11px] cursor-pointer flex items-center gap-1"
+            >
+              <Lock className="w-3 h-3" />
+              <span>Officer / Admin Login</span>
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* Main Content Area (pb-24 on mobile ensures no content is hidden behind bottom bar) */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 pb-24 sm:pb-8">
@@ -43,8 +106,60 @@ export default function Home() {
           <ReportScam locale={locale} prefill={reportPrefill} />
         )}
         {activeTab === 'operators' && <OperatorDirectory locale={locale} />}
-        {activeTab === 'enforcement' && <EnforcementDashboard locale={locale} />}
-        {activeTab === 'developer' && <AggregatorPortal locale={locale} />}
+        
+        {/* Protected RTO Enforcement View */}
+        {activeTab === 'enforcement' && (
+          user ? (
+            <EnforcementDashboard locale={locale} />
+          ) : (
+            <div className="card-clean p-8 sm:p-12 text-center max-w-lg mx-auto space-y-4 my-8">
+              <div className="w-14 h-14 rounded-2xl bg-[#183264] text-[#FF7F50] flex items-center justify-center mx-auto shadow-md">
+                <Lock className="w-7 h-7" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-xl font-bold text-[#183264]">RTO Officer Authentication Required</h3>
+                <p className="text-xs text-[#4A5D7E] max-w-sm mx-auto">
+                  The Enforcement & Scam Intelligence Command Center is restricted to authorized State Transport Authority (STA) officers and administrators.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowLoginModal(true)}
+                className="btn-coral text-xs py-2.5 px-5 mx-auto cursor-pointer shadow-sm"
+              >
+                <Shield className="w-4 h-4 text-[#183264]" />
+                <span>Sign In as Officer / Admin</span>
+              </button>
+            </div>
+          )
+        )}
+
+        {/* Protected Aggregator API View (Admin Only) */}
+        {activeTab === 'developer' && (
+          user?.role === 'ADMIN' ? (
+            <AggregatorPortal locale={locale} />
+          ) : (
+            <div className="card-clean p-8 sm:p-12 text-center max-w-lg mx-auto space-y-4 my-8">
+              <div className="w-14 h-14 rounded-2xl bg-[#183264] text-[#FF7F50] flex items-center justify-center mx-auto shadow-md">
+                <Key className="w-7 h-7" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-xl font-bold text-[#183264]">Administrator Clearance Required</h3>
+                <p className="text-xs text-[#4A5D7E] max-w-sm mx-auto">
+                  The Aggregator Verification API Console (Module 5) and cryptographic key generation is restricted to SafeBus System Administrators.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowLoginModal(true)}
+                className="btn-coral text-xs py-2.5 px-5 mx-auto cursor-pointer shadow-sm"
+              >
+                <Shield className="w-4 h-4 text-[#183264]" />
+                <span>Sign In as SafeBus Admin</span>
+              </button>
+            </div>
+          )
+        )}
       </main>
 
       {/* Footer Band (Navy #183264 with White Text and Coral Accents) */}

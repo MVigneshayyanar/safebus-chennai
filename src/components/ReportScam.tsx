@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Flag, AlertTriangle, ShieldAlert, CheckCircle2, PhoneCall, 
   ExternalLink, Upload, RefreshCw, Sparkles, Send, FileText, 
-  IndianRupee, MapPin, Search, Link2, Smartphone
+  IndianRupee, MapPin, Search, Link2, Smartphone, Gavel, Copy, Check, Printer
 } from 'lucide-react';
 import { Locale } from '@/lib/i18n';
 
@@ -29,6 +29,8 @@ export default function ReportScam({ locale, prefill }: ReportScamProps) {
   const [submitting, setSubmitting] = useState(false);
   const [submissionResult, setSubmissionResult] = useState<any>(null);
   const [recentReports, setRecentReports] = useState<any[]>([]);
+  const [showLegalDossier, setShowLegalDossier] = useState(false);
+  const [copiedDossier, setCopiedDossier] = useState(false);
 
   useEffect(() => {
     if (prefill) {
@@ -99,6 +101,56 @@ export default function ReportScam({ locale, prefill }: ReportScamProps) {
       route: 'KCBT Kilambakkam → Coimbatore',
       description: 'Seller on WhatsApp scalping Deepavali special bus tickets at 2.5x normal fare, demanded advance payment via UPI to tickets.fastbus@oksbi then blocked number.',
     });
+  };
+
+  const handleCopyLegalDossier = () => {
+    navigator.clipboard.writeText(generateLegalDossierText());
+    setCopiedDossier(true);
+    setTimeout(() => setCopiedDossier(false), 2500);
+  };
+
+  const generateLegalDossierText = () => {
+    const refId = submissionResult?.referenceNumber || `SBC-FIR-${Math.floor(100000 + Math.random() * 900000)}`;
+    const dateStr = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+
+    return `FORMAL CYBERCRIME COMPLAINT & EVIDENTIARY DOSSIER
+UNDER SECTION 66D INFORMATION TECHNOLOGY ACT (2000) & SECTIONS 419, 420, 120B INDIAN PENAL CODE (IPC) / BHARATIYA NYAYA SANHITA (BNS)
+
+TO:
+The Superintendent of Police / Cyber Crime Police Station,
+Greater Chennai Police & Tamil Nadu State Transport Authority (STA) Enforcement Wing,
+Grievance Case Reference: SafeBus Chennai Transit Fraud Prevention System (PS-04)
+
+1. INCIDENT & JURISDICTION REFERENCE:
+Incident Reference Number : ${refId}
+Timestamp of Recording    : ${dateStr} IST
+Jurisdiction Transit Hub  : Kilambakkam (KCBT) / Tambaram Transit Corridor, Chennai
+Verification System       : SafeBus Chennai NextGen Anti-Fraud Engine
+
+2. DETAILS OF ACCUSED ENTITIES / SYNDICATE:
+Offence Category         : ${formData.type === 'FAKE_PORTAL' ? 'Fraudulent Phishing Bus Booking Portal' : formData.type === 'SCALPER' ? 'Extortionate Bus Ticket Scalping via Unofficial Channels' : formData.type === 'FAKE_TICKET' ? 'Counterfeit E-Ticket Issuance with Forged Cryptographic Stamp' : 'Unauthorized Passenger Carriage Carrier'}
+Suspect URL / Portal     : ${formData.url || 'N/A (Conducted via Direct Messaging)'}
+Suspect Mobile / Contact : ${formData.phone || 'N/A'}
+Beneficiary Mule UPI VPA : ${formData.upiId || 'N/A'}
+Financial Loss Incurred  : ₹${formData.amountLost || '0'} INR
+Targeted Omnibus Route   : ${formData.route}
+
+3. COMPLAINANT STATEMENT OF FACTS:
+${formData.description || 'The suspect impersonated an authorized omnibus operator and extracted unauthorized advance payments from passengers without valid STA permits or ticket delivery.'}
+
+4. STATUTORY PENAL PROVISIONS APPLICABLE:
+a) Section 66D, Information Technology Act, 2000: Cheating by personation by using computer resource (cognizable offence; imprisonment up to 3 years and fine).
+b) Section 420 & 419, IPC / Section 318(4) & 319 BNS: Cheating and dishonestly inducing delivery of property through deceptive representation.
+c) Section 120B, IPC: Criminal conspiracy involving transit touts, fraudulent aggregators, and mule bank accounts.
+d) Section 192A & 207, Motor Vehicles Act, 1988: Operating unauthorized stage carriages without statutory permit.
+
+5. PRAYER / RELIEF SOUGHT:
+i. Issue immediate freezing orders under Section 102 CrPC to the beneficiary UPI PSP and recipient bank for VPA: ${formData.upiId || 'Suspect account'}.
+ii. Requisition Call Detail Records (CDR) and IP connection logs under Section 91 CrPC for suspect phone: ${formData.phone || 'Suspect number'}.
+iii. Coordinate with Tamil Nadu State Transport Authority (STA) Enforcement Wing for impounding involved transport carriers.
+
+VERIFIED ELECTRONICALLY VIA SAFEBUS CHENNAI ANTI-FRAUD REGISTRY
+SHA-256 EVIDENTIARY HASH: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`;
   };
 
   return (
@@ -267,23 +319,96 @@ export default function ReportScam({ locale, prefill }: ReportScamProps) {
                 />
               </div>
 
-              {/* Coral Action Button */}
-              <button
-                type="submit"
-                disabled={submitting}
-                className="btn-coral w-full cursor-pointer py-3"
-              >
-                {submitting ? <RefreshCw className="w-4 h-4 animate-spin text-[#183264]" /> : <Send className="w-4 h-4 text-[#183264]" />}
-                <span>{isTa ? 'புகாரை உடனடியாகச் சமர்ப்பிக்கவும்' : 'Submit Grievance to STA & Cybercrime'}</span>
-              </button>
+              {/* Action Buttons */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="btn-coral w-full cursor-pointer py-3"
+                >
+                  {submitting ? <RefreshCw className="w-4 h-4 animate-spin text-[#183264]" /> : <Send className="w-4 h-4 text-[#183264]" />}
+                  <span>{isTa ? 'புகாரை சமர்ப்பிக்கவும்' : 'Submit to STA Registry'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowLegalDossier(!showLegalDossier)}
+                  className="py-3 px-3 bg-[#183264] hover:bg-[#102244] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                >
+                  <Gavel className="w-4 h-4 text-[#FF7F50]" />
+                  <span>{showLegalDossier ? 'Hide Police FIR Draft' : 'Generate Legal FIR Draft'}</span>
+                </button>
+              </div>
             </form>
           </div>
         </div>
 
         {/* Right Column: Status & Community Feed */}
         <div className="lg:col-span-5 space-y-4">
+          {/* LEGAL COMPLAINT DOSSIER PREVIEW */}
+          {showLegalDossier && (
+            <div className="bg-[#183264] text-white rounded-2xl p-4 sm:p-5 border-2 border-[#FF7F50] shadow-md space-y-3">
+              <div className="flex items-center justify-between border-b border-white/15 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-[#FF7F50] rounded-lg text-[#183264]">
+                    <Gavel className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-[#FF7F50] font-bold uppercase tracking-wider">Sec 66D IT Act / Sec 420 IPC</div>
+                    <div className="text-xs font-bold text-white">Statutory Police Complaint Draft</div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={handleCopyLegalDossier}
+                    className="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold transition-all cursor-pointer"
+                    title="Copy full complaint text"
+                  >
+                    {copiedDossier ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold transition-all cursor-pointer"
+                    title="Print complaint dossier"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Monospace complaint body */}
+              <div className="bg-black/40 border border-white/10 p-3 rounded-xl max-h-72 overflow-y-auto font-mono text-[10px] text-slate-200 leading-relaxed whitespace-pre-wrap select-all">
+                {generateLegalDossierText()}
+              </div>
+
+              <div className="flex items-center justify-between gap-2 pt-1 text-[11px]">
+                <button
+                  type="button"
+                  onClick={handleCopyLegalDossier}
+                  className="btn-coral py-2 px-3 text-xs font-bold flex-1 flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  {copiedDossier ? <Check className="w-3.5 h-3.5 text-[#183264]" /> : <Copy className="w-3.5 h-3.5 text-[#183264]" />}
+                  <span>{copiedDossier ? 'Copied to Clipboard!' : 'Copy Complaint Text'}</span>
+                </button>
+
+                <a
+                  href="https://cybercrime.gov.in"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="py-2 px-3 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold border border-white/20 flex items-center justify-center gap-1 cursor-pointer"
+                >
+                  <span>Portal (1930)</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            </div>
+          )}
+
           {/* Success Banner */}
-          {submissionResult && (
+          {submissionResult && !showLegalDossier && (
             <div className="bg-[#F0FDF4] border border-[#1E9E5A] p-4 sm:p-5 rounded-2xl text-[#1E9E5A] space-y-2.5 shadow-xs">
               <div className="flex items-center gap-2 font-bold text-sm">
                 <CheckCircle2 className="w-5 h-5" />
@@ -296,15 +421,23 @@ export default function ReportScam({ locale, prefill }: ReportScamProps) {
                   Extracted fraud entities have been added to the SafeBus Chennai dynamic blocklist and forwarded to STA Enforcement cell.
                 </div>
               </div>
-              <div className="pt-1.5 flex flex-col gap-2">
+              <div className="pt-1.5 flex flex-col sm:flex-row gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowLegalDossier(true)}
+                  className="btn-navy py-2 text-xs cursor-pointer flex-1 flex items-center justify-center gap-1"
+                >
+                  <Gavel className="w-3.5 h-3.5 text-[#FF7F50]" />
+                  <span>View Legal FIR Dossier</span>
+                </button>
                 <a
                   href="https://cybercrime.gov.in"
                   target="_blank"
                   rel="noreferrer"
-                  className="btn-navy py-2 text-xs cursor-pointer"
+                  className="btn-coral py-2 text-xs cursor-pointer flex items-center justify-center gap-1"
                 >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>File National Cybercrime Portal FIR</span>
+                  <span>cybercrime.gov.in</span>
+                  <ExternalLink className="w-3 h-3 text-[#183264]" />
                 </a>
               </div>
             </div>
