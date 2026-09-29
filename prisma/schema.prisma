@@ -1,0 +1,262 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Operator {
+  id                 String        @id @default(cuid())
+  publicId           String        @unique // e.g. OP-TN-0001
+  name               String
+  permitNumber       String        @unique
+  permitExpiry       DateTime
+  gstin              String?
+  pan                String?
+  status             String        @default("PENDING") // VERIFIED | PENDING | SUSPENDED | REJECTED
+  trustScore         Int           @default(50)
+  registeredMerchantId String?
+  registeredUpiVpa   String?
+  contactPhone       String?
+  hubs               String        @default("[]") // JSON array
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  vehicles           Vehicle[]
+  keys               OperatorKey[]
+  tickets            Ticket[]
+  scalpingAlerts     ScalpingAlert[]
+
+  @@index([status])
+  @@index([publicId])
+}
+
+model Vehicle {
+  id                 String   @id @default(cuid())
+  operatorId         String
+  registrationNumber String   @unique
+  fitnessExpiry      DateTime
+  insuranceExpiry    DateTime
+  seats              Int
+  type               String   @default("SLEEPER") // SLEEPER | SEMI_SLEEPER | SEATER | AC_SLEEPER
+  createdAt          DateTime @default(now())
+
+  operator           Operator @relation(fields: [operatorId], references: [id])
+  tickets            Ticket[]
+
+  @@index([operatorId])
+}
+
+model OperatorKey {
+  id                  String    @id @default(cuid())
+  operatorId          String
+  kid                 String    @unique // Key ID
+  publicKeyPem        String
+  privateKeyEncrypted String    // Encrypted with master key
+  status              String    @default("ACTIVE") // ACTIVE | REVOKED
+  createdAt           DateTime  @default(now())
+  revokedAt           DateTime?
+
+  operator            Operator  @relation(fields: [operatorId], references: [id])
+
+  @@index([operatorId])
+  @@index([kid])
+}
+
+model Route {
+  id              String   @id @default(cuid())
+  fromCity        String
+  toCity          String
+  distanceKm      Int
+  baseFare        Float
+  fareCapMultiplier Float  @default(1.5)
+  createdAt       DateTime @default(now())
+
+  tickets         Ticket[]
+  reports         Report[]
+  scalpingAlerts  ScalpingAlert[]
+
+  @@index([fromCity, toCity])
+}
+
+model Ticket {
+  id              String    @id @default(cuid())
+  ticketNumber    String    @unique
+  operatorId      String
+  routeId         String
+  vehicleId       String?
+  travelDateTime  DateTime
+  seat            String
+  passengerHash   String
+  fare            Float
+  paymentId       String?
+  status          String    @default("ISSUED") // ISSUED | BOARDED | CANCELLED | REVOKED
+  boardedAt       DateTime?
+  jws             String    // Signed JWS compact token
+  issuedAt        DateTime  @default(now())
+
+  operator        Operator  @relation(fields: [operatorId], references: [id])
+  route           Route     @relation(fields: [routeId], references: [id])
+  vehicle         Vehicle?  @relation(fields: [vehicleId], references: [id])
+  payment         Payment?  @relation(fields: [paymentId], references: [id])
+
+  @@index([ticketNumber])
+  @@index([operatorId])
+  @@index([status])
+  @@index([passengerHash])
+}
+
+model Payment {
+  id              String   @id @default(cuid())
+  provider        String   @default("RAZORPAY") // RAZORPAY | MOCK
+  orderId         String   @unique
+  paymentRefId    String?  // External payment ID
+  amount          Float
+  payeeMerchantId String?
+  status          String   @default("CREATED") // CREATED | PAID | FAILED | REFUNDED
+  rawWebhook      String?  // JSON
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tickets         Ticket[]
+
+  @@index([orderId])
+  @@index([status])
+}
+
+model Domain {
+  id              String   @id @default(cuid())
+  host            String   @unique
+  verdict         String   @default("SUSPICIOUS") // SAFE | SUSPICIOUS | FRAUD | ALLOWLISTED
+  riskScore       Int      @default(50)
+  reasons         String   @default("[]") // JSON array
+  whoisAgeDays    Int?
+  tlsIssuer       String?
+  tlsAgeDays      Int?
+  hostingIp       String?
+  firstSeen       DateTime @default(now())
+  lastChecked     DateTime @default(now())
+  source          String   @default("SEARCH") // SEARCH | CT_LOG | TYPOSQUAT | SOCIAL | USER_REPORT
+
+  @@index([host])
+  @@index([verdict])
+  @@index([riskScore])
+}
+
+model Report {
+  id              String   @id @default(cuid())
+  reporterId      String?  // nullable for anonymous
+  type            String   // FAKE_PORTAL | FAKE_TICKET | SCALPER | FAKE_OPERATOR
+  url             String?
+  phone           String?
+  upiId           String?
+  amountLost      Float?
+  routeId         String?
+  description     String?
+  screenshotPath  String?
+  ocrText         String?
+  status          String   @default("NEW") // NEW | IN_REVIEW | CONFIRMED | REJECTED
+  clusterId       String?
+  aiSummary       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  route           Route?   @relation(fields: [routeId], references: [id])
+
+  @@index([status])
+  @@index([type])
+  @@index([clusterId])
+}
+
+model Entity {
+  id              String   @id @default(cuid())
+  kind            String   // DOMAIN | PHONE | UPI
+  value           String
+  reportCount     Int      @default(1)
+  blocklisted     Boolean  @default(false)
+  clusterId       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([kind, value])
+  @@index([kind])
+  @@index([clusterId])
+  @@index([blocklisted])
+}
+
+model ScalpingAlert {
+  id              String   @id @default(cuid())
+  kind            String   // BULK_BUY | PRICE_GOUGE | RESALE_LISTING | DUPLICATE_SCAN
+  severity        String   @default("MEDIUM") // LOW | MEDIUM | HIGH | CRITICAL
+  details         String   @default("{}") // JSON
+  routeId         String?
+  operatorId      String?
+  createdAt       DateTime @default(now())
+  status          String   @default("OPEN") // OPEN | RESOLVED | DISMISSED
+
+  route           Route?   @relation(fields: [routeId], references: [id])
+  operator        Operator? @relation(fields: [operatorId], references: [id])
+
+  @@index([kind])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model ApiClient {
+  id              String   @id @default(cuid())
+  name            String
+  apiKeyHash      String   @unique
+  rateLimit       Int      @default(100) // requests per minute
+  webhookUrl      String?
+  createdAt       DateTime @default(now())
+
+  webhookDeliveries WebhookDelivery[]
+
+  @@index([apiKeyHash])
+}
+
+model WebhookDelivery {
+  id              String   @id @default(cuid())
+  clientId        String
+  event           String
+  payload         String   // JSON
+  status          String   @default("PENDING") // PENDING | DELIVERED | FAILED
+  attempts        Int      @default(0)
+  lastAttempt     DateTime?
+  createdAt       DateTime @default(now())
+
+  client          ApiClient @relation(fields: [clientId], references: [id])
+
+  @@index([clientId])
+  @@index([status])
+}
+
+model AuditLog {
+  id              String   @id @default(cuid())
+  actor           String
+  action          String
+  entity          String
+  entityId        String?
+  meta            String?  // JSON
+  createdAt       DateTime @default(now())
+
+  @@index([actor])
+  @@index([entity])
+  @@index([createdAt])
+}
+
+model User {
+  id              String   @id @default(cuid())
+  email           String   @unique
+  passwordHash    String
+  role            String   @default("OFFICER") // ADMIN | OFFICER
+  name            String?
+  createdAt       DateTime @default(now())
+
+  @@index([email])
+}
